@@ -1,0 +1,14 @@
+# стан Terraform ніколи не потрапляє в git
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.tfstate.lock.info
+
+# значення змінних часто містять специфічне для вас
+*.tfvars
+!*.tfvars.example
+
+# редактори й системне
+.DS_Store
+*.swp
+crash.log

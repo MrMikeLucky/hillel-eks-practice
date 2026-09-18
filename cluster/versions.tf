@@ -1,0 +1,29 @@
+terraform {
+  required_version = ">= 1.9"
+
+  # Блок cloud підключає воркспейс у HCP Terraform.
+  # Замініть ОРГАНІЗАЦІЯ на ім'я своєї організації.
+  # Якщо працюєте локально зі станом у файлі — закоментуйте весь блок cloud.
+  cloud {
+    organization = "ОРГАНІЗАЦІЯ"
+
+    workspaces {
+      tags = ["hillel-eks"]
+    }
+  }
+
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 6.0"
+    }
+  }
+}
+
+provider "aws" {
+  region = var.region
+
+  default_tags {
+    tags = local.common_tags
+  }
+}

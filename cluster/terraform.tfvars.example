@@ -1,0 +1,13 @@
+# Скопіюйте у terraform.tfvars і підставте своє.
+# Файл terraform.tfvars у git НЕ потрапляє — див. .gitignore.
+
+# Обов'язково: ваше прізвище латиницею, малими літерами.
+prefix = "prizvyshche"
+
+# Решта має розумні значення за замовчуванням.
+# region             = "eu-central-1"
+# kubernetes_version = "1.34"
+# vpc_cidr           = "10.30.0.0/16"
+
+# 2 під час заняття, 0 між заняттями.
+node_desired_size = 2
