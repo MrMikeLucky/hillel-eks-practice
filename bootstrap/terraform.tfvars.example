@@ -1,7 +1,0 @@
-# Скопіюйте у terraform.tfvars і підставте своє.
-tfc_organization = "ваша-організація"
-
-# Решта має значення за замовчуванням:
-# workspace_prefix = "hillel-eks"
-# role_name        = "tfc-hillel-eks"
-# region           = "eu-central-1"
