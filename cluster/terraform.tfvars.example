@@ -4,10 +4,19 @@
 # Обов'язково: ваше прізвище латиницею, малими літерами.
 prefix = "prizvyshche"
 
-# Решта має розумні значення за замовчуванням.
-# region             = "eu-central-1"
-# kubernetes_version = "1.34"
-# vpc_cidr           = "10.30.0.0/16"
+# Обов'язково: ваш ARN. Без нього kubectl отримає Unauthorized.
+# Узяти: у CloudShell виконайте  aws sts get-caller-identity  і скопіюйте поле Arn.
+cluster_admin_arns = [
+  "arn:aws:iam::123456789012:user/imya",
+]
 
-# 2 під час заняття, 0 між заняттями.
-node_desired_size = 2
+# 1 під час заняття, 0 між заняттями.
+node_desired_size = 1
+
+# SPOT за замовчуванням. Якщо вузол не піднімається — розкоментуйте:
+# node_capacity_type = "ON_DEMAND"
+
+# Решта має розумні значення за замовчуванням:
+# node_instance_types = ["c7i-flex.large", "m7i-flex.large"]
+# node_max_pods       = 110
+# kubernetes_version  = "1.34"

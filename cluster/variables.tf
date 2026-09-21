@@ -38,29 +38,117 @@ variable "vpc_cidr" {
 variable "node_desired_size" {
   description = <<-EOT
     Скільки вузлів тримати.
-    2 — під час заняття. 0 — між заняттями: кластер лишається живим,
-    але за вузли ви не платите. Підняти назад — близько трьох хвилин.
+    1 — під час заняття: увесь навчальний навантаження вміщається на одному вузлі
+        (розрахунок — у README). 0 — між заняттями: кластер лишається живим,
+        об'єкти в ньому теж, але за вузли ви не платите.
   EOT
   type        = number
-  default     = 2
+  default     = 1
 
   validation {
-    condition     = var.node_desired_size >= 0 && var.node_desired_size <= 4
-    error_message = "Від 0 до 4. Більше для навчального кластера не потрібно."
+    condition     = var.node_desired_size >= 0 && var.node_desired_size <= 3
+    error_message = "Від 0 до 3. Більше для навчального кластера не потрібно."
   }
 }
 
 variable "node_instance_types" {
   description = <<-EOT
-    Типи машин для spot-групи. Кілька типів принципово важливі:
-    spot шукає вільну потужність серед усіх перелічених, і один тип у списку —
-    найчастіша причина, чому група не піднімається.
+    Типи машин для групи вузлів.
+
+    ОБМЕЖЕННЯ FREE PLAN: на акаунтах, створених після 15.07.2025 на Free plan,
+    дозволені лише t3.micro, t3.small, t4g.micro, t4g.small, c7i-flex.large,
+    m7i-flex.large. Інші типи просто не запустяться.
+
+    Чому саме ці два, а не t3.small: навіть із prefix delegation, яка знімає
+    ліміт подів, EKS резервує під систему пам'ять пропорційно до maxPods.
+    На 2 GiB у t3.small після резерву майже нічого не лишається. Розрахунок — у README.
+
+    Для spot потрібно кілька типів: AWS шукає вільну потужність серед усіх
+    перелічених. Обидва мають 2 vCPU, тож бюджет рахуємо за меншим — c7i-flex.large.
   EOT
   type        = list(string)
-  default     = ["t3.medium", "t3a.medium", "t2.medium"]
+  default     = ["c7i-flex.large", "m7i-flex.large"]
 
   validation {
-    condition     = length(var.node_instance_types) >= 2
-    error_message = "Вкажіть щонайменше два типи машин, інакше spot часто не знайде потужності."
+    condition     = length(var.node_instance_types) >= 1
+    error_message = "Вкажіть щонайменше один тип машини."
+  }
+
+  validation {
+    condition     = !anytrue([for t in var.node_instance_types : contains(["t3.micro", "t4g.micro"], t)])
+    error_message = "t3.micro і t4g.micro вміщають лише 4 поди — їх повністю займуть системні компоненти. Оберіть c7i-flex.large."
+  }
+}
+
+variable "node_capacity_type" {
+  description = <<-EOT
+    SPOT або ON_DEMAND.
+
+    За замовчуванням SPOT: у кілька разів дешевше за ту саму машину.
+
+    УВАГА: ми НЕ змогли підтвердити в документації AWS, що spot працює на
+    Free plan. Якщо вузол не піднімається й у подіях групи вузлів помилка про
+    spot або квоту — поставте ON_DEMAND. Окремо перевірте квоту:
+    для SPOT це "All Standard (A, C, D, H, I, M, R, T, Z) Spot Instance Requests",
+    для ON_DEMAND — "Running On-Demand Standard (A, C, D, H, I, M, R, T, Z) instances".
+
+    Spot-машину AWS може забрати з двохвилинним попередженням. З одним вузлом
+    це означає коротку паузу, поки підніметься новий: для навчання прийнятно,
+    для продакшну — ні.
+  EOT
+  type        = string
+  default     = "SPOT"
+
+  validation {
+    condition     = contains(["ON_DEMAND", "SPOT"], var.node_capacity_type)
+    error_message = "Лише ON_DEMAND або SPOT."
+  }
+}
+
+variable "node_max_pods" {
+  description = <<-EOT
+    Скільки подів дозволено на вузлі. Працює лише разом із prefix delegation,
+    яку ми вмикаємо в доповненні vpc-cni.
+
+    Без prefix delegation ліміт задає кількість мережевих інтерфейсів машини:
+    для c7i-flex.large це 29. З нею кожен слот інтерфейсу отримує не одну
+    адресу, а блок із шістнадцяти, і ліміт знімається.
+
+    110 — рекомендація AWS для машин із менш ніж 30 vCPU.
+
+    ЦІНА: EKS резервує під систему 255 MiB плюс 11 MiB на КОЖЕН дозволений под.
+    110 подів — це близько 1.4 GiB резерву замість 0.6 GiB при 29. На 4 GiB
+    вузлі подам лишається ~2.2 GiB замість ~3.1. Якщо подів вам стільки не
+    треба — зменшіть число й отримаєте пам'ять назад.
+  EOT
+  type        = number
+  default     = 110
+
+  validation {
+    condition     = var.node_max_pods >= 11 && var.node_max_pods <= 250
+    error_message = "Від 11 до 250. AWS рекомендує 110 для машин до 30 vCPU."
+  }
+}
+
+variable "cluster_admin_arns" {
+  description = <<-EOT
+    ARN ваших облікових записів IAM, яким потрібен доступ kubectl до кластера.
+
+    ЧОМУ ЦЕ ОБОВ'ЯЗКОВО: кластер створює роль HCP Terraform, і права
+    адміністратора за замовчуванням отримує саме вона. Ваш власний користувач IAM
+    без цього запису отримає Unauthorized на будь-яку команду kubectl.
+
+    Узяти свій ARN: у CloudShell виконайте aws sts get-caller-identity.
+  EOT
+  type        = list(string)
+
+  validation {
+    condition     = length(var.cluster_admin_arns) >= 1
+    error_message = "Додайте щонайменше свій ARN, інакше kubectl не матиме доступу до кластера."
+  }
+
+  validation {
+    condition     = alltrue([for a in var.cluster_admin_arns : can(regex("^arn:aws:(iam|sts)::[0-9]{12}:", a))])
+    error_message = "Кожен елемент має бути ARN вигляду arn:aws:iam::123456789012:user/ім'я."
   }
 }

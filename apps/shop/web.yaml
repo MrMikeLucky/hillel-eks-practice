@@ -1,0 +1,75 @@
+# ---------------------------------------------------------------------------
+# web — фронт, що проксіює /api/ на сервіс api за іменем.
+#
+# Service типу ClusterIP, а не LoadBalancer — свідомо:
+#   1) контролер балансувальників у кластері ще не встановлений;
+#   2) кожен LoadBalancer — це окремий ELB в AWS, який коштує гроші
+#      навіть тоді, коли вузли опущені в нуль.
+# Дістатися до застосунку: kubectl port-forward -n shop svc/web 8080:80
+# ---------------------------------------------------------------------------
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: web-nginx
+data:
+  default.conf: |
+    server {
+      listen 80;
+      location /healthz { return 200 'ok'; }
+      location /api/ { proxy_pass http://api/; }
+      location / {
+        default_type text/plain;
+        return 200 'shop web on EKS, delivered by Flux. try /api/\n';
+      }
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  labels:
+    app: web
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: web
+  template:
+    metadata:
+      labels:
+        app: web
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:1.27-alpine
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              cpu: 50m
+              memory: 32Mi
+            limits:
+              cpu: 200m
+              memory: 64Mi
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 80
+          volumeMounts:
+            - name: conf
+              mountPath: /etc/nginx/conf.d
+      volumes:
+        - name: conf
+          configMap:
+            name: web-nginx
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+spec:
+  selector:
+    app: web
+  ports:
+    - port: 80
+      targetPort: 80

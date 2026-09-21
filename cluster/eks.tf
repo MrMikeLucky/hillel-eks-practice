@@ -19,8 +19,28 @@ module "eks" {
   endpoint_private_access = true
 
   # Той, хто створив кластер, одразу отримує права адміністратора в ньому.
-  # Без цього kubectl не запрацює навіть у вас.
+  # УВАГА: «той, хто створив» — це роль HCP Terraform, а НЕ ви.
+  # Саме тому нижче є окремий блок access_entries для вашого користувача.
   enable_cluster_creator_admin_permissions = true
+
+  # -------------------------------------------------------------------------
+  # Доступ людей до кластера.
+  # Access entries прив'язують обліковий запис IAM до прав у кластері.
+  # Кожен ARN зі змінної cluster_admin_arns отримує права адміністратора.
+  # -------------------------------------------------------------------------
+  access_entries = {
+    for i, arn in var.cluster_admin_arns : "admin-${i}" => {
+      principal_arn = arn
+      policy_associations = {
+        admin = {
+          policy_arn = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+          access_scope = {
+            type = "cluster"
+          }
+        }
+      }
+    }
+  }
 
   vpc_id = module.vpc.vpc_id
 
@@ -38,6 +58,27 @@ module "eks" {
     # порядку, а не декоративний прапорець.
     vpc-cni = {
       before_compute = true
+
+      # ---------------------------------------------------------------------
+      # Prefix delegation — як у продакшні знімають ліміт подів на вузлі.
+      #
+      # За замовчуванням кожен под отримує одну адресу з VPC, а кількість
+      # адрес на машині обмежена її мережевими інтерфейсами (29 для
+      # c7i-flex.large). З prefix delegation кожен слот інтерфейсу отримує
+      # не одну адресу, а цілий блок /28 — шістнадцять адрес.
+      #
+      # WARM_PREFIX_TARGET — скільки вільних блоків тримати напоготові,
+      # щоб нові поди не чекали на виділення адрес.
+      #
+      # Працює лише на машинах Nitro (усі сучасні типи, включно з нашими)
+      # і має бути ввімкнено ДО появи вузлів — саме тому before_compute.
+      # ---------------------------------------------------------------------
+      configuration_values = jsonencode({
+        env = {
+          ENABLE_PREFIX_DELEGATION = "true"
+          WARM_PREFIX_TARGET       = "1"
+        }
+      })
     }
 
     coredns                = {}
@@ -55,23 +96,45 @@ module "eks" {
   }
 
   # -------------------------------------------------------------------------
-  # Група вузлів на spot-машинах.
-  # Знижка 70-90% від звичайної ціни. Плата за це — AWS може забрати машину,
-  # попередивши за дві хвилини.
+  # Група вузлів.
+  # Тип машини й модель оплати — у змінних, з поясненням обмежень Free plan.
   # -------------------------------------------------------------------------
   eks_managed_node_groups = {
-    spot = {
+    main = {
       ami_type       = "AL2023_x86_64_STANDARD"
       instance_types = var.node_instance_types
-      capacity_type  = "SPOT"
+      capacity_type  = var.node_capacity_type
 
       # min_size = 0 — саме це дозволяє опускати кластер у нуль
       # між заняттями, не видаляючи його.
       min_size     = 0
-      max_size     = 4
+      max_size     = 3
       desired_size = var.node_desired_size
 
       disk_size = 20
+
+      # ---------------------------------------------------------------------
+      # Друга половина prefix delegation — і найчастіша пастка.
+      #
+      # На AL2023 одного прапорця в vpc-cni НЕДОСТАТНЬО: nodeadm за
+      # замовчуванням рахує maxPods за кількістю інтерфейсів, нічого не знаючи
+      # про prefix delegation. Без цього блоку вузол і далі покаже pods: 29.
+      #
+      # Тому явно передаємо maxPods у налаштування kubelet через NodeConfig.
+      # Перевірка: kubectl describe node покаже pods: 110 у Capacity.
+      # ---------------------------------------------------------------------
+      cloudinit_pre_nodeadm = [{
+        content_type = "application/node.eks.aws"
+        content      = <<-EOT
+          ---
+          apiVersion: node.eks.aws/v1alpha1
+          kind: NodeConfig
+          spec:
+            kubelet:
+              config:
+                maxPods: ${var.node_max_pods}
+        EOT
+      }]
 
       labels = {
         workload = "general"

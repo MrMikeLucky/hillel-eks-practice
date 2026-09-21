@@ -1,0 +1,9 @@
+# Kustomize збирає ці файли докупи. Flux застосовує саме цю теку.
+# Щоб додати новий об'єкт — покладіть файл сюди й допишіть його в перелік.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: shop
+resources:
+  - namespace.yaml
+  - api.yaml
+  - web.yaml
