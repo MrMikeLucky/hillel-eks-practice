@@ -17,6 +17,14 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 6.0"
     }
+
+    # Знадобиться, коли ви скопіюєте сюди файли з lessons/09-flux.
+    # Поки ресурсів helm немає, провайдер лише завантажується під час init
+    # і більше нічого не робить.
+    helm = {
+      source  = "hashicorp/helm"
+      version = "~> 3.0"
+    }
   }
 }
 

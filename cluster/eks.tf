@@ -70,8 +70,14 @@ module "eks" {
       # WARM_PREFIX_TARGET — скільки вільних блоків тримати напоготові,
       # щоб нові поди не чекали на виділення адрес.
       #
+      # Для КЕРОВАНОЇ групи вузлів цього досить: EKS сам перерахує ліміт
+      # подів на вузлі з урахуванням prefix delegation. Окремо задавати maxPods
+      # потрібно лише для self-managed вузлів, власних AMI або Karpenter.
+      #
       # Працює лише на машинах Nitro (усі сучасні типи, включно з нашими)
       # і має бути ввімкнено ДО появи вузлів — саме тому before_compute.
+      # Вузли, створені раніше, треба перестворити, інакше вони покажуть
+      # старий ліміт.
       # ---------------------------------------------------------------------
       configuration_values = jsonencode({
         env = {
@@ -112,29 +118,6 @@ module "eks" {
       desired_size = var.node_desired_size
 
       disk_size = 20
-
-      # ---------------------------------------------------------------------
-      # Друга половина prefix delegation — і найчастіша пастка.
-      #
-      # На AL2023 одного прапорця в vpc-cni НЕДОСТАТНЬО: nodeadm за
-      # замовчуванням рахує maxPods за кількістю інтерфейсів, нічого не знаючи
-      # про prefix delegation. Без цього блоку вузол і далі покаже pods: 29.
-      #
-      # Тому явно передаємо maxPods у налаштування kubelet через NodeConfig.
-      # Перевірка: kubectl describe node покаже pods: 110 у Capacity.
-      # ---------------------------------------------------------------------
-      cloudinit_pre_nodeadm = [{
-        content_type = "application/node.eks.aws"
-        content      = <<-EOT
-          ---
-          apiVersion: node.eks.aws/v1alpha1
-          kind: NodeConfig
-          spec:
-            kubelet:
-              config:
-                maxPods: ${var.node_max_pods}
-        EOT
-      }]
 
       labels = {
         workload = "general"
