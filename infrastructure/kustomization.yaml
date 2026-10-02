@@ -9,3 +9,4 @@ resources:
   - sources.yaml
   - aws-load-balancer-controller.yaml
   - external-secrets.yaml
+  - storageclass.yaml
