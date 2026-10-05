@@ -9,11 +9,11 @@ image:
   tag: "1.27-alpine"
 
 web:
-  replicas: 1
+  replicas: 2
   # Текст головної сторінки. Лежить у ConfigMap — змініть і подивіться,
   # як поди перезапускаються самі (анотація checksum/config у web.yaml).
   # Без апострофів: текст потрапляє в рядок nginx у одинарних лапках.
-  message: "shop web on EKS, installed by Helm"
+#  message: "shop web on EKS, installed by Helm"
 
 api:
   replicas: 1
